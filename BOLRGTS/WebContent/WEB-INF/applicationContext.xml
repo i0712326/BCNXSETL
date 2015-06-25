@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+		xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		xmlns:aop="http://www.springframework.org/schema/aop"
+		xmlns:tx="http://www.springframework.org/schema/tx"
+		xmlns:context="http://www.springframework.org/schema/context"
+		xmlns:jee="http://www.springframework.org/schema/jee"
+		xsi:schemaLocation="http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee-2.5.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-2.5.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd"> 		
+   <jee:jndi-lookup id="dataSource" jndi-name="jdbc/cbs" expected-type="javax.sql.DataSource"/>
+   <tx:annotation-driven transaction-manager="txManager"/>
+   <context:component-scan base-package="bol.bconnex.settlement" />
+   <!-- Scheduler job -->
+   <bean name="schedulerJob1" class="org.springframework.scheduling.quartz.JobDetailBean">
+     <property name="jobClass" value="bol.bconnex.settlement.business.listener.SwiftResponseJob" />
+     <property name="jobDataAsMap">
+		 <map>
+		    <entry key="swiftResponseWork" value-ref="swiftResponseWork" />
+		 </map>
+      </property>
+   </bean>
+   <bean name="schedulerJob2" class="org.springframework.scheduling.quartz.JobDetailBean">
+   		<property name="jobClass" value="bol.bconnex.settlement.business.listener.RgtsJob"/>
+   		<property name="jobDataAsMap">
+   			<map>
+   				<entry key="rgtsWork" value-ref="rgtsWork"/>
+   			</map>
+   		</property>
+   </bean>
+   <!-- CRON Trigger, run every 5 seconds -->
+   <bean id="cronTrigger1" class="org.springframework.scheduling.quartz.CronTriggerBean">
+		<property name="jobDetail" ref="schedulerJob1" />
+		<property name="cronExpression" value="0/5 * * * * ?" />
+   </bean>
+   <bean id="cronTrigger2" class="org.springframework.scheduling.quartz.CronTriggerBean">
+		<property name="jobDetail" ref="schedulerJob2" />
+		<property name="cronExpression" value="0/5 * * * * ?" />
+   </bean>
+   <!-- Scheduler -->
+   <bean class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+		<property name="jobDetails">
+		   <list>
+		      <ref bean="schedulerJob1" />
+		      <ref bean="schedulerJob2" />
+		   </list>
+		</property>
+		<property name="triggers">
+		    <list>
+				<ref bean="cronTrigger1" />
+				<ref bean="cronTrigger2" />
+		    </list>
+		</property>
+   </bean>   
+	<!-- Job Set up -->
+	<bean id="swiftResponseWork" class="bol.bconnex.settlement.business.listener.SwiftResponseWorkImp">
+		<property name="ftpAccessService" ref="ftpAccessService"/>
+		<property name="settleTxnService" ref="settleTxnService"/>
+		<property name="settlementService" ref="settlementService"/>
+		<property name="path" value="E:\out"/>
+	</bean>
+	<bean id="rgtsWork" class="bol.bconnex.settlement.business.listener.RgtsWorkImp">
+		<property name="command" value="cmd /c C:\\Users\\phoud\\Desktop\\test.bat"/>
+	</bean>
+	<!-- FTP Bean configuration -->
+	<bean id="ftpAccessService" class="bol.bconnex.settlement.business.service.FtpAccessServiceImp">
+		<constructor-arg ref="ftpClient"/>
+		<constructor-arg value="172.16.3.122"/>
+		<constructor-arg value="user01"/>
+		<constructor-arg value="bcel@m1n"/>
+		<!-- remote input -->
+		<constructor-arg value="in"/>
+		<!-- remote output -->
+		<constructor-arg value="out/COEBLALAXATM"/>
+	</bean>
+	<bean id="ftpClient" class="org.apache.commons.net.ftp.FTPClient"/>
+	
+	<!-- Session Factory -->
+	<bean id="sessionFactory" class="org.springframework.orm.hibernate3.annotation.AnnotationSessionFactoryBean">
+		<property name="dataSource" ref="dataSource"/>
+		<property name="annotatedClasses">
+			<list>
+				<value>bol.bconnex.settlement.data.entity.User</value>
+				<value>bol.bconnex.settlement.data.entity.Account</value>
+				<value>bol.bconnex.settlement.data.entity.Role</value>
+				<value>bol.bconnex.settlement.data.entity.Settlement</value>
+				<value>bol.bconnex.settlement.data.entity.SettleTxn</value>
+			</list>
+		</property>
+		<property name="hibernateProperties">
+			<props>
+				<prop key="hibernate.dialect"> 
+					org.hibernate.dialect.MySQLInnoDBDialect
+				</prop>
+				<prop key="hibernate.show_sql">true</prop>
+				<prop key="hibernate.hibernate.connection.autocommit">false</prop>
+			</props>
+		</property>
+	</bean>
+	<!-- transaction manager -->
+	<bean id="txManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+    	<property name="dataSource" ref="dataSource"/>
+  	</bean>
+	<!-- Transaction Management -->
+	
+	<bean id="transactionInterceptor" 
+       class="org.springframework.transaction.interceptor.TransactionInterceptor">
+	<property name="transactionManager" ref="transactionManager" />
+	<property name="transactionAttributes">
+	   <props>
+		<prop key="insert*,save*, add*">PROPAGATION_REQUIRED</prop>
+	   </props>
+	</property>
+    </bean>
+ 
+    <bean id="transactionManager" 
+        class="org.springframework.orm.hibernate3.HibernateTransactionManager">
+	  <property name="dataSource" ref="dataSource" />
+	  <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+	
+</beans>
